@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS Email Spam Detection CTSN
+Parameters:
+  EndPointName:
+    Type: String
+Resources:
+ S3BucketStoringEmailCloudFormation:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+      BucketName: email-cloud-formation-123
+    DeletionPolicy: Retain
+ BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action: '*'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref S3BucketStoringEmailCloudFormation
+                - /*
+      Bucket: !Ref S3BucketStoringEmailCloudFormation
+ EmailLambdaCLoudFormation:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: emaillambdacloudformation-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+            - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonSESFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchEventsFullAccess
+      Path: /
+ LambdaFunctionEmail:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        S3Bucket: ml-model-myawsbucket
+        S3Key: lambda_function.zip
+      Description: lambda function for email
+      Environment:
+        Variables:
+          ENDPOINT_NAME: !Ref EndPointName
+      FunctionName: email_lambda_cloudformation
+      Handler: lambda_function.lambda_handler
+      MemorySize: 512
+      Role: 
+       Fn::GetAtt:
+          - EmailLambdaCLoudFormation
+          - Arn
+      Runtime: python3.8
+      Timeout: 60
+ SesRuleSet:
+  Type: 'AWS::SES::ReceiptRuleSet'
+ SesRule:
+  Type: 'AWS::SES::ReceiptRule'
+  Properties:
+    Rule:
+      Actions:
+        - S3Action:
+            BucketName: !Ref S3BucketStoringEmailCloudFormation
+      Enabled: true
+      ScanEnabled: false
+    RuleSetName: !Ref SesRuleSet
